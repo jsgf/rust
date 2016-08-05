@@ -1887,6 +1887,24 @@ impl<'a, K, V, S> Extend<(&'a K, &'a V)> for HashMap<K, V, S>
     }
 }
 
+impl<K, V, S> Hash for HashMap<K, V, S>
+    where K: Hash, V: Hash, S: BuildHasher
+{
+    // Compute hash of entire HashMap in a way that's independent of the
+    // iteration order of the elements.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        u64 mut h = 0;
+
+        for elt in self {
+            let mut hasher = self.build_hasher();
+            elt.hash(&mut hasher);
+            h ^= hasher.finish();
+        }
+
+        state.write_u64(h);
+    }
+}
+
 /// `RandomState` is the default state for `HashMap` types.
 ///
 /// A particular instance `RandomState` will create the same instances of
@@ -2854,5 +2872,34 @@ mod test_map {
         }
         assert_eq!(a.len(), 1);
         assert_eq!(a[key], value);
+    }
+
+    #[test]
+    fn test_map_hash_empty() {
+        let m = HashMap::new();
+        let mut state = m.hash_builder().make_hash();
+        m.hash(&mut state);
+        assert_eq(state.finish(), 0);
+    }
+
+    #[test]
+    fn test_map_hash_eq() {
+        let mut a = HashMap::new();
+        a.insert("a", 1);
+        a.insert("b", 2);
+        a.insert("c", 3);
+
+        let mut b = HashMap::new();
+        b.insert("c", 3);
+        b.insert("b", 2);
+        b.insert("a", 1);
+
+        let mut s1 = a.hash_builder().make_hash();
+        a.hash(&mut s1);
+
+        let mut s2 = b.hash_builder().make_hash();
+        b.hash(&mut s2);
+
+        assert_eq(s1.finish(), s2.finish());
     }
 }

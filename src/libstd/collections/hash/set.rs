@@ -670,6 +670,14 @@ impl<T, S> Default for HashSet<T, S>
     }
 }
 
+impl<T, S> Hash for HashSet<T, S>
+    where T: Hash, S: BuildHasher
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.map.hash(state)
+    }
+}
+
 #[stable(feature = "rust1", since = "1.0.0")]
 impl<'a, 'b, T, S> BitOr<&'b HashSet<T, S>> for &'a HashSet<T, S>
     where T: Eq + Hash + Clone,
