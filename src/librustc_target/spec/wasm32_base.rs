@@ -77,9 +77,11 @@ pub fn options() -> TargetOptions {
     TargetOptions {
         // we allow dynamic linking, but only cdylibs. Basically we allow a
         // final library artifact that exports some symbols (a wasm module) but
-        // we don't allow intermediate `dylib` crate types
+        // we don't allow intermediate `dylib` crate types.
+        // We can handle being a proc-macro as a cdylib.
         dynamic_linking: true,
         only_cdylib: true,
+        cdylib_proc_macro: true,
 
         // This means we'll just embed a `start` function in the wasm module
         executables: true,

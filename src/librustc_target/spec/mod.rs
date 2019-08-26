@@ -594,6 +594,8 @@ pub struct TargetOptions {
     pub dynamic_linking: bool,
     /// If dynamic linking is available, whether only cdylibs are supported.
     pub only_cdylib: bool,
+    /// Represents proc-macros as cdylibs
+    pub cdylib_proc_macro: bool,
     /// Whether executables are available on this target. iOS, for example, only allows static
     /// libraries. Defaults to false.
     pub executables: bool,
@@ -805,6 +807,7 @@ impl Default for TargetOptions {
             features: String::new(),
             dynamic_linking: false,
             only_cdylib: false,
+            cdylib_proc_macro: false,
             executables: false,
             relocation_model: "pic".to_string(),
             code_model: None,
@@ -1120,6 +1123,7 @@ impl Target {
         key!(features);
         key!(dynamic_linking, bool);
         key!(only_cdylib, bool);
+        key!(cdylib_proc_macro, bool);
         key!(executables, bool);
         key!(relocation_model);
         key!(code_model, optional);
@@ -1336,6 +1340,7 @@ impl ToJson for Target {
         target_option_val!(features);
         target_option_val!(dynamic_linking);
         target_option_val!(only_cdylib);
+        target_option_val!(cdylib_proc_macro);
         target_option_val!(executables);
         target_option_val!(relocation_model);
         target_option_val!(code_model);
