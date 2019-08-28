@@ -8,7 +8,7 @@ use rustc_data_structures::fingerprint::Fingerprint;
 use crate::lint;
 use crate::lint::builtin::BuiltinLintDiagnostics;
 use crate::middle::dependency_format;
-use crate::session::config::{OutputType, PrintRequest, SwitchWithOptPath};
+use crate::session::config::{CrateType, OutputType, PrintRequest, SwitchWithOptPath};
 use crate::session::search_paths::{PathKind, SearchPath};
 use crate::util::nodemap::{FxHashMap, FxHashSet};
 use crate::util::common::{duration_to_secs_str, ErrorReported};
@@ -91,6 +91,8 @@ pub struct Session {
     pub plugin_llvm_passes: OneThread<RefCell<Vec<String>>>,
     pub plugin_attributes: Lock<Vec<(Symbol, AttributeType)>>,
     pub crate_types: Once<Vec<config::CrateType>>,
+    /// Real linkage crate type for this target
+    pub proc_macro_crate_type: config::CrateType,
     pub dependency_formats: Once<dependency_format::Dependencies>,
     /// The crate_disambiguator is constructed out of all the `-C metadata`
     /// arguments passed to the compiler. Its value together with the crate-name
@@ -1013,6 +1015,18 @@ impl Session {
         // then try to skip it where possible.
         dbg_opts.plt.unwrap_or(needs_plt || !full_relro)
     }
+
+    pub fn proc_macro_crate_type(&self) -> CrateType {
+        self.proc_macro_crate_type
+    }
+
+    pub fn normalize_proc_macro(&self, crate_type: CrateType) -> CrateType {
+        if crate_type == CrateType::ProcMacro {
+            self.proc_macro_crate_type
+        } else {
+            crate_type
+        }
+    }
 }
 
 pub fn build_session(
@@ -1224,6 +1238,10 @@ fn build_session_(
         CguReuseTracker::new_disabled()
     };
 
+    let proc_macro_crate_type =
+        self::config::parse_crate_type(&target_cfg.target.options.proc_macro_crate_type)
+            .expect("Target has bad proc_macro crate type");
+
     let sess = Session {
         target: target_cfg,
         host,
@@ -1240,6 +1258,7 @@ fn build_session_(
         plugin_llvm_passes: OneThread::new(RefCell::new(Vec::new())),
         plugin_attributes: Lock::new(Vec::new()),
         crate_types: Once::new(),
+        proc_macro_crate_type,
         dependency_formats: Once::new(),
         crate_disambiguator: Once::new(),
         features: Once::new(),

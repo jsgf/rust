@@ -2070,7 +2070,6 @@ pub fn build_session_options_and_crate_config(
     let crate_types = parse_crate_types_from_list(unparsed_crate_types)
         .unwrap_or_else(|e| early_error(error_format, &e[..]));
 
-
     let (lint_opts, describe_lints, lint_cap) = get_cmd_lint_options(matches, error_format);
 
     let mut debugging_opts = build_debugging_options(matches, error_format);
@@ -2506,20 +2505,25 @@ pub fn build_session_options_and_crate_config(
     )
 }
 
+pub(crate) fn parse_crate_type(krate: &str) -> Result<CrateType, String> {
+    let res = match krate {
+        "lib" => default_lib_output(),
+        "rlib" => CrateType::Rlib,
+        "staticlib" => CrateType::Staticlib,
+        "dylib" => CrateType::Dylib,
+        "cdylib" => CrateType::Cdylib,
+        "bin" => CrateType::Executable,
+        "proc-macro" => CrateType::ProcMacro,
+        _ => return Err(format!("unknown crate type: `{}`", krate))
+    };
+    Ok(res)
+}
+
 pub fn parse_crate_types_from_list(list_list: Vec<String>) -> Result<Vec<CrateType>, String> {
     let mut crate_types: Vec<CrateType> = Vec::new();
     for unparsed_crate_type in &list_list {
         for part in unparsed_crate_type.split(',') {
-            let new_part = match part {
-                "lib" => default_lib_output(),
-                "rlib" => CrateType::Rlib,
-                "staticlib" => CrateType::Staticlib,
-                "dylib" => CrateType::Dylib,
-                "cdylib" => CrateType::Cdylib,
-                "bin" => CrateType::Executable,
-                "proc-macro" => CrateType::ProcMacro,
-                _ => return Err(format!("unknown crate type: `{}`", part))
-            };
+            let new_part = parse_crate_type(&part)?;
             if !crate_types.contains(&new_part) {
                 crate_types.push(new_part)
             }

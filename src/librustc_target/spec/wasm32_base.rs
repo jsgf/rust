@@ -81,7 +81,7 @@ pub fn options() -> TargetOptions {
         // We can handle being a proc-macro as a cdylib.
         dynamic_linking: true,
         only_cdylib: true,
-        cdylib_proc_macro: true,
+        proc_macro_crate_type: "cdylib".to_string(),
 
         // This means we'll just embed a `start` function in the wasm module
         executables: true,

@@ -156,6 +156,7 @@ pub fn default_output_for_target(sess: &Session) -> config::CrateType {
 /// Checks if target supports crate_type as output
 pub fn invalid_output_for_target(sess: &Session,
                                  crate_type: config::CrateType) -> bool {
+    let crate_type = sess.normalize_proc_macro(crate_type);
     match crate_type {
         config::CrateType::Cdylib |
         config::CrateType::Dylib |
@@ -171,7 +172,7 @@ pub fn invalid_output_for_target(sess: &Session,
     }
     if sess.target.target.options.only_cdylib {
         match crate_type {
-            config::CrateType::ProcMacro => return !sess.target.target.options.cdylib_proc_macro,
+            config::CrateType::ProcMacro |
             config::CrateType::Dylib => return true,
             _ => {}
         }
