@@ -25,6 +25,7 @@ use errors::emitter::HumanReadableErrorType;
 use errors::{ColorConfig, FatalError, Handler};
 
 use getopts;
+use env_sandbox::LogicalEnv;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::collections::btree_map::{
@@ -445,6 +446,8 @@ top_level_options!(
         json_artifact_notifications: bool [TRACKED],
 
         pretty: Option<(PpMode, Option<UserIdentifiedItem>)> [UNTRACKED],
+        // Environment variables sandboxed with a logical environment
+        env_sandbox: LogicalEnv [TRACKED],
     }
 );
 
@@ -627,6 +630,7 @@ impl Default for Options {
             edition: DEFAULT_EDITION,
             json_artifact_notifications: false,
             pretty: None,
+            env_sandbox: LogicalEnv::new(),
         }
     }
 }
@@ -1852,6 +1856,29 @@ pub fn rustc_optgroups() -> Vec<RustcOptGroup> {
             "Remap source names in all output (compiler messages and output files)",
             "FROM=TO",
         ),
+        opt::flag(
+            "",
+            "env-empty",
+            "Start with an empty logical environment",
+        ),
+        opt::multi(
+            "",
+            "env-allow",
+            "Allow a set of environment variables to be accessed from source code",
+            "REGEX",
+        ),
+        opt::multi(
+            "",
+            "env-deny",
+            "Prevent a set of environment variables from being accessed from source code",
+            "REGEX",
+        ),
+        opt::multi(
+            "",
+            "env-set",
+            "Set a logical environment variable's value",
+            "VAR=VALUE",
+        ),
     ]);
     opts
 }
@@ -2434,6 +2461,52 @@ fn parse_remap_path_prefix(
         .collect()
 }
 
+fn parse_env_sandbox(
+    matches: &getopts::Matches,
+    error_format: ErrorOutputType,
+) -> LogicalEnv {
+    // Hmm, matches doesn't preserve global argument ordering, so we can't
+    // apply options in command-line ordering. Should we apply deny + allow + set,
+    // where it starts as process, deny removes entry, allow re-applies from process env
+    // and finally set.
+
+    let mut env = LogicalEnv::from_process_environment();
+
+    // Start with empty env if desired (could be done with env-deny but this is clearer)
+    if matches.opt_present("env-empty") {
+        env = LogicalEnv::new();
+    }
+
+    // Remove each unwanted variable pattern
+    for deny in matches.opt_strs("env-deny") {
+        if let Err(err) = env.deny(&deny) {
+            early_error(error_format, "Bad regex for --env-deny");
+        }
+    }
+
+    // (Re-)copy allowed variables from the process environment again
+    for allow in matches.opt_strs("env-allow") {
+        if let Err(err) = env.allow(&allow) {
+            early_error(error_format, "Bad regex for --env-allow");
+        }
+    }
+
+    for set in matches.opt_strs("env-set") {
+        let mut parts = set.splitn(2, '=');
+        let var = parts.next();
+        let val = parts.next();
+        match (var, val) {
+            (Some(var), Some(val)) => env.set(var, val),
+            _ => early_error(
+                error_format,
+                "--env-set must contain '=' between VAR and VALUE",
+            ),
+        }
+    }
+
+    env
+}
+
 pub fn build_session_options(matches: &getopts::Matches) -> Options {
     let color = parse_color(matches);
 
@@ -2523,6 +2596,7 @@ pub fn build_session_options(matches: &getopts::Matches) -> Options {
     let remap_path_prefix = parse_remap_path_prefix(matches, error_format);
 
     let pretty = parse_pretty(matches, &debugging_opts, error_format);
+    let env_sandbox = parse_env_sandbox(matches, error_format);
 
     Options {
         crate_types,
@@ -2555,6 +2629,7 @@ pub fn build_session_options(matches: &getopts::Matches) -> Options {
         edition,
         json_artifact_notifications,
         pretty,
+        env_sandbox,
     }
 }
 
@@ -2907,6 +2982,7 @@ mod dep_tracking {
     use rustc_target::spec::{MergeFunctions, PanicStrategy, RelroLevel, TargetTriple};
     use syntax::edition::Edition;
     use syntax::feature_gate::UnstableFeatures;
+    use env_sandbox::LogicalEnv;
 
     pub trait DepTrackingHash {
         fn hash(&self, hasher: &mut DefaultHasher, error_format: ErrorOutputType);
@@ -3026,6 +3102,17 @@ mod dep_tracking {
             Hash::hash(&key.len(), hasher);
             Hash::hash(key, hasher);
             sub_hash.hash(hasher, error_format);
+        }
+    }
+
+    // LogicalEnv is a bit odd - if it has an untouched copy of the process environment then
+    // it returns a constant hash (ie, we ignore the environment), but if it has been
+    // tailored then we compute the hash over the logical environment.
+    impl DepTrackingHash for LogicalEnv {
+        fn hash(&self, hasher: &mut DefaultHasher, error_format: ErrorOutputType){
+            if !self.is_pristine() {
+                Hash::hash(self, hasher);
+            }
         }
     }
 }

@@ -1042,6 +1042,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_sandbox"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "rustc-hash",
+]
+
+[[package]]
 name = "error-chain"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3147,6 +3155,7 @@ dependencies = [
  "bitflags",
  "byteorder",
  "chalk-engine",
+ "env_sandbox",
  "fmt_macros",
  "graphviz",
  "jobserver",

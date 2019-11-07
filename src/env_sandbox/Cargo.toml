@@ -1,0 +1,8 @@
+[package]
+edition = "2018"
+name = "env_sandbox"
+version = "0.1.0"
+
+[dependencies]
+regex = "1"
+rustc-hash = "1.0"
