@@ -1,0 +1,18 @@
+warning: external crate `bar` unused in `extern_loc_file`: remove the dependency or add `use bar as _;`
+  --> $DIR/extern-loc-file.rs:8:1
+   |
+LL |   #![warn(unused_crate_dependencies)]
+   |   ^
+   | 
+  ::: $DIR/test.mk:3:1
+   |
+LL | / foo: bar.rlib
+LL | |     $(RUSTC) --crate-type bin --extern bar=bar.rlib
+   | |_ help: remove unnecessary dependency: `bar`
+   |
+note: the lint level is defined here
+  --> $DIR/extern-loc-file.rs:8:9
+   |
+LL | #![warn(unused_crate_dependencies)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+

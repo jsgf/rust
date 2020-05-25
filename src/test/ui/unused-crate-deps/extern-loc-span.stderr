@@ -1,0 +1,17 @@
+warning: external crate `bar` unused in `extern_loc_span`: remove the dependency or add `use bar as _;`
+  --> $DIR/extern-loc-span.rs:8:1
+   |
+LL | #![warn(unused_crate_dependencies)]
+   | ^
+   | 
+  ::: $DIR/test.mk:3:6
+   |
+LL | foo: bar.rlib
+   |      -------- help: remove unnecessary dependency: `bar`
+   |
+note: the lint level is defined here
+  --> $DIR/extern-loc-span.rs:8:9
+   |
+LL | #![warn(unused_crate_dependencies)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+

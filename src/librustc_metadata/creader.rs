@@ -7,7 +7,7 @@ use rustc::hir::map::Definitions;
 use rustc::middle::cstore::DepKind;
 use rustc::middle::cstore::{CrateSource, ExternCrate, ExternCrateSource, MetadataLoaderDyn};
 use rustc::session::config;
-use rustc::session::lint;
+use rustc::session::lint::{self, BuiltinLintDiagnostics};
 use rustc::session::search_paths::PathKind;
 use rustc::session::{CrateDisambiguator, Session};
 use rustc::ty::TyCtxt;
@@ -843,7 +843,11 @@ impl<'a> CrateLoader<'a> {
         // Complain about anything left over
         for (name, _) in self.sess.opts.externs.iter() {
             if !self.used_extern_options.contains(&Symbol::intern(name)) {
-                self.sess.parse_sess.buffer_lint(
+                let diag = match self.sess.opts.extern_dep_specs.get(name) {
+                    Some(loc) => BuiltinLintDiagnostics::ExternDepSpec(name.clone(), loc.clone()),
+                    None => BuiltinLintDiagnostics::Normal,
+                };
+                self.sess.parse_sess.buffer_lint_with_diagnostic(
                     lint::builtin::UNUSED_CRATE_DEPENDENCIES,
                     span,
                     ast::CRATE_NODE_ID,
@@ -852,6 +856,7 @@ impl<'a> CrateLoader<'a> {
                         name,
                         self.local_crate_name,
                         name),
+                    diag,
                 );
             }
         }

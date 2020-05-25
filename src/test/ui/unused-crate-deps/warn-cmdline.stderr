@@ -6,5 +6,3 @@ LL | fn main() {}
    |
    = note: requested on the command line with `-W unused-crate-dependencies`
 
-warning: 1 warning emitted
-

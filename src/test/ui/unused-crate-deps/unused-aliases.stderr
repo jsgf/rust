@@ -10,5 +10,3 @@ note: the lint level is defined here
 LL | #![warn(unused_crate_dependencies)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-warning: 1 warning emitted
-

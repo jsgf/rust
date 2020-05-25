@@ -1,0 +1,2 @@
+error: unknown location type `badloc`: use `file`, `span` or `raw`
+

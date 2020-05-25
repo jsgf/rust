@@ -29,7 +29,7 @@ use rustc_ast::ast;
 use rustc_ast::util::lev_distance::find_best_match_for_name;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::sync;
-use rustc_errors::{struct_span_err, Applicability};
+use rustc_errors::{struct_span_err, Applicability, SuggestionStyle};
 use rustc_hir as hir;
 use rustc_hir::def_id::{CrateNum, DefId};
 use rustc_session::lint::BuiltinLintDiagnostics;
@@ -569,6 +569,29 @@ pub trait LintContext: Sized {
                     db.span_label(span, "rustdoc does not generate documentation for macros");
                     db.help("to document an item produced by a macro, \
                                   the macro must produce the documentation as part of its expansion");
+                }
+                BuiltinLintDiagnostics::ExternDepSpec(krate, loc) => {
+                    match loc.to_span(&self.sess().source_map()) {
+                        Ok(Some(span)) =>{
+                            db.span_suggestion(
+                                span, "remove unnecessary dependency",
+                                krate,
+                                Applicability::Unspecified,
+                            );
+                        }
+                        Ok(None) |
+                        Err(_) => {
+                            db.help(&format!("remove unnecessary dependency `{}` at `{}`", krate, loc));
+                            // Hack to sneak the raw location out as a `suggested_replacement` in the json diagnostic
+                            db.span_suggestion_with_style(
+                                DUMMY_SP,
+                                "raw extern location",
+                                loc.to_string(),
+                                Applicability::Unspecified,
+                                SuggestionStyle::CompletelyHidden,
+                            );
+                        }
+                    };
                 }
             }
             // Rewrap `db`, and pass control to the user.

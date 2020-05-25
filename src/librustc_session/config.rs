@@ -16,8 +16,10 @@ use rustc_target::spec::{Target, TargetTriple};
 use crate::parse::CrateConfig;
 use rustc_feature::UnstableFeatures;
 use rustc_span::edition::{Edition, DEFAULT_EDITION, EDITION_NAME_LIST};
-use rustc_span::source_map::{FileName, FilePathMapping};
+use rustc_span::hygiene::SyntaxContext;
+use rustc_span::source_map::{FileName, FilePathMapping, SourceMap};
 use rustc_span::symbol::{sym, Symbol};
+use rustc_span::{BytePos, Span};
 
 use rustc_errors::emitter::HumanReadableErrorType;
 use rustc_errors::{ColorConfig, FatalError, Handler, HandlerFlags};
@@ -27,6 +29,7 @@ use std::collections::btree_map::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::io;
 use std::iter::{self, FromIterator};
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
@@ -329,6 +332,9 @@ impl OutputTypes {
 #[derive(Clone)]
 pub struct Externs(BTreeMap<String, ExternEntry>);
 
+#[derive(Clone)]
+pub struct ExternDepSpecs(BTreeMap<String, ExternDepSpec>);
+
 #[derive(Clone, Debug)]
 pub struct ExternEntry {
     pub location: ExternLocation,
@@ -360,6 +366,20 @@ pub enum ExternLocation {
     ExactPaths(BTreeSet<String>),
 }
 
+/// Supplied source location of a dependency - for example in a build specification
+/// file like Cargo.toml. We support several syntaxes: if it makes sense to reference
+/// a file and line, then the build system can specify that. On the other hand, it may
+/// make more sense to have an arbitrary raw string.
+#[derive(Clone, Eq, PartialEq)]
+pub enum ExternDepSpec {
+    /// File path and 1-based line
+    FileLine { path: PathBuf, line: u32 },
+    /// File path and byte range
+    FileSpan { path: PathBuf, start: u32, end: u32 },
+    /// Raw string
+    Raw(String),
+}
+
 impl Externs {
     pub fn new(data: BTreeMap<String, ExternEntry>) -> Externs {
         Externs(data)
@@ -383,6 +403,61 @@ impl ExternEntry {
         match &self.location {
             ExternLocation::ExactPaths(set) => Some(set.iter()),
             _ => None,
+        }
+    }
+}
+
+impl ExternDepSpecs {
+    pub fn new(data: BTreeMap<String, ExternDepSpec>) -> ExternDepSpecs {
+        ExternDepSpecs(data)
+    }
+
+    pub fn get(&self, key: &str) -> Option<&ExternDepSpec> {
+        self.0.get(key)
+    }
+}
+
+impl ExternDepSpec {
+    pub fn to_span(&self, sourcemap: &SourceMap) -> io::Result<Option<Span>> {
+        match self {
+            ExternDepSpec::FileLine { path, line } => {
+                let file = sourcemap.load_file(path)?;
+
+                let line = *line as usize;
+                let span = if line >= 1 && line <= file.lines.len() {
+                    let (start, end) = file.line_bounds(line - 1);
+
+                    Some(Span::new(start, end, SyntaxContext::root()))
+                } else {
+                    None
+                };
+                Ok(span)
+            }
+            ExternDepSpec::FileSpan { path, start, end } => {
+                let file = sourcemap.load_file(path)?;
+                let start_pos = file.start_pos + BytePos(*start);
+                let end_pos = std::cmp::min(file.start_pos + BytePos(*end), file.end_pos);
+
+                let span = if start_pos <= end_pos && end_pos <= file.end_pos {
+                    Some(Span::new(start_pos, end_pos, SyntaxContext::root()))
+                } else {
+                    None
+                };
+                Ok(span)
+            }
+            ExternDepSpec::Raw(_) => Ok(None),
+        }
+    }
+}
+
+impl fmt::Display for ExternDepSpec {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExternDepSpec::FileLine { path, line } => write!(fmt, "{}:{}", path.display(), line),
+            ExternDepSpec::FileSpan { path, start, end } => {
+                write!(fmt, "{}:{}-{}", path.display(), start, end)
+            }
+            ExternDepSpec::Raw(raw) => fmt.write_str(raw),
         }
     }
 }
@@ -563,6 +638,7 @@ impl Default for Options {
             cg: basic_codegen_options(),
             error_format: ErrorOutputType::default(),
             externs: Externs(BTreeMap::new()),
+            extern_dep_specs: ExternDepSpecs(BTreeMap::new()),
             crate_name: None,
             alt_std_name: None,
             libs: Vec::new(),
@@ -965,6 +1041,12 @@ pub fn rustc_optgroups() -> Vec<RustcOptGroup> {
             "extern",
             "Specify where an external rust library is located",
             "NAME[=PATH]",
+        ),
+        opt::multi_s(
+            "",
+            "extern-location",
+            "Location where an external crate dependency is specified",
+            "NAME=LOCATION",
         ),
         opt::opt_s("", "sysroot", "Override the system root", "PATH"),
         opt::multi("Z", "", "Set internal debugging options", "FLAG"),
@@ -1625,6 +1707,101 @@ pub fn parse_externs(
     Externs(externs)
 }
 
+fn parse_extern_dep_specs(
+    matches: &getopts::Matches,
+    debugging_opts: &DebuggingOptions,
+    error_format: ErrorOutputType,
+) -> ExternDepSpecs {
+    let is_unstable_enabled = debugging_opts.unstable_options;
+    let mut map = BTreeMap::new();
+
+    for arg in matches.opt_strs("extern-location") {
+        if !is_unstable_enabled {
+            early_error(
+                error_format,
+                "`--extern-location` option is unstable: set `-Z unstable-options`",
+            );
+        }
+
+        let mut parts = arg.splitn(2, '=');
+        let name = parts
+            .next()
+            .unwrap_or_else(|| early_error(error_format, "`--extern-location` value must not be empty"));
+        let loc = parts.next().unwrap_or_else(|| {
+            early_error(
+                error_format,
+                &format!("`--extern-location`: specify location for extern crate `{}`", name),
+            )
+        });
+
+        let mut locparts = loc.split(":");
+        let spec = match locparts
+            .next()
+            .unwrap_or_else(|| early_error(error_format, "location is `type:value`"))
+        {
+            "file" => {
+                let path = locparts.next().unwrap_or_else(|| {
+                    early_error(error_format, "`--extern-location`: missing pathname on `file`")
+                });
+                let line = locparts
+                    .next()
+                    .unwrap_or_else(|| {
+                        early_error(error_format, "`--extern-location`: missing line number on `file`")
+                    })
+                    .parse()
+                    .unwrap_or_else(|_| {
+                        early_error(error_format, "`--extern-location`: failed to parse line number")
+                    });
+                if let Some(_) = locparts.next() {
+                    early_error(error_format, "`--extern-location`: unwanted extra param for `file`")
+                }
+                ExternDepSpec::FileLine { path: PathBuf::from(path), line }
+            }
+            "span" => {
+                let path = locparts.next().unwrap_or_else(|| {
+                    early_error(error_format, "`--extern-location`: missing pathname on `span`")
+                });
+                let start = locparts
+                    .next()
+                    .unwrap_or_else(|| {
+                        early_error(error_format, "`--extern-location`: missing start offset on `span`")
+                    })
+                    .parse()
+                    .unwrap_or_else(|_| {
+                        early_error(error_format, "`--extern-location`: failed to parse start offset")
+                    });
+                let end = locparts
+                    .next()
+                    .unwrap_or_else(|| {
+                        early_error(error_format, "`--extern-location`: missing end offset on `span`")
+                    })
+                    .parse()
+                    .unwrap_or_else(|_| {
+                        early_error(error_format, "`--extern-location`: failed to parse end offset")
+                    });
+                if let Some(_) = locparts.next() {
+                    early_error(error_format, "`--extern-location`: unwanted extra param for `span`")
+                }
+                ExternDepSpec::FileSpan { path: PathBuf::from(path), start, end }
+            }
+            "raw" => {
+                let raw = loc.splitn(2, ':').nth(1).unwrap_or_else(|| {
+                    early_error(error_format, "`--extern-location`: missing `raw` location")
+                });
+                ExternDepSpec::Raw(raw.to_string())
+            }
+            bad => early_error(
+                error_format,
+                &format!("unknown location type `{}`: use `file`, `span` or `raw`", bad),
+            ),
+        };
+
+        map.insert(name.to_string(), spec);
+    }
+
+    ExternDepSpecs::new(map)
+}
+
 fn parse_remap_path_prefix(
     matches: &getopts::Matches,
     error_format: ErrorOutputType,
@@ -1722,6 +1899,7 @@ pub fn build_session_options(matches: &getopts::Matches) -> Options {
     }
 
     let externs = parse_externs(matches, &debugging_opts, error_format);
+    let extern_dep_specs = parse_extern_dep_specs(matches, &debugging_opts, error_format);
 
     let crate_name = matches.opt_str("crate-name");
 
@@ -1748,6 +1926,7 @@ pub fn build_session_options(matches: &getopts::Matches) -> Options {
         cg,
         error_format,
         externs,
+        extern_dep_specs,
         crate_name,
         alt_std_name: None,
         libs,

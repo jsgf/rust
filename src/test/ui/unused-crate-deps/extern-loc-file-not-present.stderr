@@ -1,0 +1,13 @@
+warning: external crate `bar` unused in `extern_loc_file_not_present`: remove the dependency or add `use bar as _;`
+  --> $DIR/extern-loc-file-not-present.rs:8:1
+   |
+LL | #![warn(unused_crate_dependencies)]
+   | ^
+   |
+note: the lint level is defined here
+  --> $DIR/extern-loc-file-not-present.rs:8:9
+   |
+LL | #![warn(unused_crate_dependencies)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: remove unnecessary dependency `bar` at `$DIR/file-does-not-exist.txt:123`
+

@@ -1,4 +1,5 @@
 pub use self::Level::*;
+use crate::config::ExternDepSpec;
 use rustc_ast::node_id::{NodeId, NodeMap};
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher, ToStableHashKey};
 use rustc_span::edition::Edition;
@@ -191,6 +192,7 @@ pub enum BuiltinLintDiagnostics {
     RedundantImport(Vec<(Span, bool)>, Ident),
     DeprecatedMacro(Option<Symbol>, Span),
     UnusedDocComment(Span),
+    ExternDepSpec(String, ExternDepSpec),
 }
 
 /// Lints that are buffered up early on in the `Session` before the
