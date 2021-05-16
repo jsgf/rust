@@ -821,6 +821,7 @@ fn should_encode_mir(tcx: TyCtxt<'_>, def_id: LocalDefId) -> (bool, bool) {
         // Constructors
         DefKind::Ctor(_, _) => {
             let mir_opt_base = tcx.sess.opts.output_types.should_codegen()
+                || tcx.sess.opts.output_types.metadata_full_mir()
                 || tcx.sess.opts.debugging_opts.always_encode_mir;
             (true, mir_opt_base)
         }
@@ -836,7 +837,8 @@ fn should_encode_mir(tcx: TyCtxt<'_>, def_id: LocalDefId) -> (bool, bool) {
                 && tcx.sess.opts.output_types.should_codegen();
             // Only check the presence of the `const` modifier.
             let is_const_fn = tcx.is_const_fn_raw(def_id.to_def_id());
-            let always_encode_mir = tcx.sess.opts.debugging_opts.always_encode_mir;
+            let always_encode_mir = tcx.sess.opts.debugging_opts.always_encode_mir
+                || tcx.sess.opts.output_types.metadata_full_mir();
             (is_const_fn, needs_inline || always_encode_mir)
         }
         // Closures can't be const fn.
@@ -845,7 +847,8 @@ fn should_encode_mir(tcx: TyCtxt<'_>, def_id: LocalDefId) -> (bool, bool) {
             let needs_inline = (generics.requires_monomorphization(tcx)
                 || tcx.codegen_fn_attrs(def_id).requests_inline())
                 && tcx.sess.opts.output_types.should_codegen();
-            let always_encode_mir = tcx.sess.opts.debugging_opts.always_encode_mir;
+            let always_encode_mir = tcx.sess.opts.debugging_opts.always_encode_mir
+                || tcx.sess.opts.output_types.metadata_full_mir();
             (false, needs_inline || always_encode_mir)
         }
         // Generators require optimized MIR to compute layout.

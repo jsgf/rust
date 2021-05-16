@@ -971,10 +971,10 @@ fn encode_and_write_metadata(
 
     let _prof_timer = tcx.sess.prof.generic_activity("write_crate_metadata");
 
-    let need_metadata_file = tcx.sess.opts.output_types.contains_key(&OutputType::Metadata);
-    if need_metadata_file {
+    let need_metadata_file = tcx.sess.opts.output_types.get_metadata();
+    if let Some(metadata_output) = need_metadata_file {
         let crate_name = &tcx.crate_name(LOCAL_CRATE).as_str();
-        let out_filename = filename_for_metadata(tcx.sess, crate_name, outputs);
+        let out_filename = filename_for_metadata(tcx.sess, crate_name, outputs, metadata_output);
         // To avoid races with another rustc process scanning the output directory,
         // we need to write the file somewhere else and atomically move it to its
         // final destination, with an `fs::rename` call. In order for the rename to

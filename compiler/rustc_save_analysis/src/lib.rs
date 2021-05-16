@@ -23,7 +23,7 @@ use rustc_middle::middle::cstore::ExternCrate;
 use rustc_middle::middle::privacy::AccessLevels;
 use rustc_middle::ty::{self, print::with_no_trimmed_paths, DefIdTree, TyCtxt};
 use rustc_middle::{bug, span_bug};
-use rustc_session::config::{CrateType, Input, OutputType};
+use rustc_session::config::{CrateType, Input};
 use rustc_session::output::{filename_for_metadata, out_filename};
 use rustc_span::source_map::Spanned;
 use rustc_span::symbol::Ident;
@@ -97,8 +97,8 @@ impl<'tcx> SaveContext<'tcx> {
         let crate_type = sess.crate_types()[0];
         let outputs = &*self.tcx.output_filenames(LOCAL_CRATE);
 
-        if outputs.outputs.contains_key(&OutputType::Metadata) {
-            filename_for_metadata(sess, crate_name, outputs)
+        if let Some(metadata_output) = outputs.outputs.get_metadata() {
+            filename_for_metadata(sess, crate_name, outputs, metadata_output)
         } else if outputs.outputs.should_codegen() {
             out_filename(sess, crate_type, outputs, crate_name)
         } else {

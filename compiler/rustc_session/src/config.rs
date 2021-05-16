@@ -210,7 +210,7 @@ pub enum OutputType {
     Assembly,
     LlvmAssembly,
     Mir,
-    Metadata,
+    Metadata(bool), // true = full-mir
     Object,
     Exe,
     DepInfo,
@@ -221,7 +221,7 @@ impl_stable_hash_via_hash!(OutputType);
 impl OutputType {
     fn is_compatible_with_codegen_units_and_single_output_file(&self) -> bool {
         match *self {
-            OutputType::Exe | OutputType::DepInfo | OutputType::Metadata => true,
+            OutputType::Exe | OutputType::DepInfo | OutputType::Metadata(_) => true,
             OutputType::Bitcode
             | OutputType::Assembly
             | OutputType::LlvmAssembly
@@ -237,7 +237,8 @@ impl OutputType {
             OutputType::LlvmAssembly => "llvm-ir",
             OutputType::Mir => "mir",
             OutputType::Object => "obj",
-            OutputType::Metadata => "metadata",
+            OutputType::Metadata(true) => "metadata",
+            OutputType::Metadata(false) => "check",
             OutputType::Exe => "link",
             OutputType::DepInfo => "dep-info",
         }
@@ -250,7 +251,8 @@ impl OutputType {
             "mir" => OutputType::Mir,
             "llvm-bc" => OutputType::Bitcode,
             "obj" => OutputType::Object,
-            "metadata" => OutputType::Metadata,
+            "metadata" => OutputType::Metadata(true),
+            "check" => OutputType::Metadata(false),
             "link" => OutputType::Exe,
             "dep-info" => OutputType::DepInfo,
             _ => return None,
@@ -259,13 +261,14 @@ impl OutputType {
 
     fn shorthands_display() -> String {
         format!(
-            "`{}`, `{}`, `{}`, `{}`, `{}`, `{}`, `{}`, `{}`",
+            "`{}`, `{}`, `{}`, `{}`, `{}`, `{}`, `{}`, `{}`, `{}`",
             OutputType::Bitcode.shorthand(),
             OutputType::Assembly.shorthand(),
             OutputType::LlvmAssembly.shorthand(),
             OutputType::Mir.shorthand(),
             OutputType::Object.shorthand(),
-            OutputType::Metadata.shorthand(),
+            OutputType::Metadata(true).shorthand(),
+            OutputType::Metadata(false).shorthand(),
             OutputType::Exe.shorthand(),
             OutputType::DepInfo.shorthand(),
         )
@@ -278,7 +281,8 @@ impl OutputType {
             OutputType::LlvmAssembly => "ll",
             OutputType::Mir => "mir",
             OutputType::Object => "o",
-            OutputType::Metadata => "rmeta",
+            OutputType::Metadata(true) => "rmeta",
+            OutputType::Metadata(false) => "rcheck",
             OutputType::DepInfo => "d",
             OutputType::Exe => "",
         }
@@ -356,6 +360,24 @@ impl OutputTypes {
         self.0.len()
     }
 
+    pub fn has_metadata(&self) -> bool {
+        self.contains_key(&OutputType::Metadata(true))
+            || self.contains_key(&OutputType::Metadata(false))
+    }
+
+    pub fn get_metadata(&self) -> Option<&OutputType> {
+        for k in self.keys() {
+            if let OutputType::Metadata(_) = k {
+                return Some(k);
+            }
+        }
+        None
+    }
+
+    pub fn metadata_full_mir(&self) -> bool {
+        self.contains_key(&OutputType::Metadata(true))
+    }
+
     // Returns `true` if any of the output types require codegen or linking.
     pub fn should_codegen(&self) -> bool {
         self.0.keys().any(|k| match *k {
@@ -365,7 +387,7 @@ impl OutputTypes {
             | OutputType::Mir
             | OutputType::Object
             | OutputType::Exe => true,
-            OutputType::Metadata | OutputType::DepInfo => false,
+            OutputType::Metadata(_) | OutputType::DepInfo => false,
         })
     }
 
@@ -376,7 +398,7 @@ impl OutputTypes {
             | OutputType::Assembly
             | OutputType::LlvmAssembly
             | OutputType::Mir
-            | OutputType::Metadata
+            | OutputType::Metadata(_)
             | OutputType::Object
             | OutputType::DepInfo => false,
             OutputType::Exe => true,
@@ -1051,7 +1073,7 @@ pub fn rustc_short_optgroups() -> Vec<RustcOptGroup> {
             "emit",
             "Comma separated list of types of output for \
              the compiler to emit",
-            "[asm|llvm-bc|llvm-ir|obj|metadata|link|dep-info|mir]",
+            "[asm|llvm-bc|llvm-ir|obj|metadata|check|link|dep-info|mir]",
         ),
         opt::multi_s(
             "",
@@ -1399,7 +1421,27 @@ fn parse_output_types(
     if output_types.is_empty() {
         output_types.insert(OutputType::Exe, None);
     }
-    OutputTypes(output_types)
+
+    let output_types = OutputTypes(output_types);
+
+    if output_types.contains_key(&OutputType::Metadata(false)) {
+        // Avoid confusion about what kind of metadata we're generating
+        if output_types.contains_key(&OutputType::Metadata(true)) {
+            early_error(
+                error_format,
+                &format!("emission types `metadata` and `check` are exclusive",),
+            )
+        }
+
+        // Avoid having to generate separate metadata for check and for rlib/dylib internals
+        if output_types.should_codegen() {
+            early_error(
+                error_format,
+                &format!("emission type `check` is incompatible with code generation",),
+            )
+        }
+    }
+    output_types
 }
 
 fn should_override_cgus_and_disable_thinlto(

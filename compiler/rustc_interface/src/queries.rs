@@ -396,7 +396,7 @@ impl Linker {
             .opts
             .output_types
             .keys()
-            .any(|&i| i == OutputType::Exe || i == OutputType::Metadata)
+            .any(|&i| matches!(i, OutputType::Exe | OutputType::Metadata(_)))
         {
             return Ok(());
         }

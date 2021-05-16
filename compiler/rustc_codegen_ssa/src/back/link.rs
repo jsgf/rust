@@ -6,7 +6,7 @@ use rustc_hir::def_id::CrateNum;
 use rustc_middle::middle::cstore::{EncodedMetadata, LibSource};
 use rustc_middle::middle::dependency_format::Linkage;
 use rustc_session::config::{self, CFGuard, CrateType, DebugInfo};
-use rustc_session::config::{OutputFilenames, OutputType, PrintRequest};
+use rustc_session::config::{OutputFilenames, PrintRequest};
 use rustc_session::output::{check_file_is_writeable, invalid_output_for_target, out_filename};
 use rustc_session::search_paths::PathKind;
 use rustc_session::utils::NativeLibKind;
@@ -52,7 +52,7 @@ pub fn link_binary<'a, B: ArchiveBuilder<'a>>(
     crate_name: &str,
 ) {
     let _timer = sess.timer("link_binary");
-    let output_metadata = sess.opts.output_types.contains_key(&OutputType::Metadata);
+    let output_metadata = sess.opts.output_types.has_metadata();
     for &crate_type in sess.crate_types().iter() {
         // Ignore executable crates if we have -Z no-codegen, as they will error.
         if (sess.opts.debugging_opts.no_codegen || !sess.opts.output_types.should_codegen())

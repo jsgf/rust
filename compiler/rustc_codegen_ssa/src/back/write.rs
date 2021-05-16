@@ -137,7 +137,7 @@ impl ModuleConfig {
             || match kind {
                 ModuleKind::Regular => sess.opts.output_types.contains_key(&OutputType::Object),
                 ModuleKind::Allocator => false,
-                ModuleKind::Metadata => sess.opts.output_types.contains_key(&OutputType::Metadata),
+                ModuleKind::Metadata => sess.opts.output_types.has_metadata(),
             };
 
         let emit_obj = if !should_emit_obj {
@@ -592,7 +592,7 @@ fn produce_final_output_artifacts(
                 user_wants_objects = true;
                 copy_if_one_unit(OutputType::Object, true);
             }
-            OutputType::Mir | OutputType::Metadata | OutputType::Exe | OutputType::DepInfo => {}
+            OutputType::Mir | OutputType::Metadata(_) | OutputType::Exe | OutputType::DepInfo => {}
         }
     }
 

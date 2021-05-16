@@ -405,6 +405,8 @@ impl<'a> CrateLocator<'a> {
                 (&file[(rlib_prefix.len())..(file.len() - ".rlib".len())], CrateFlavor::Rlib)
             } else if file.starts_with(&rlib_prefix) && file.ends_with(".rmeta") {
                 (&file[(rlib_prefix.len())..(file.len() - ".rmeta".len())], CrateFlavor::Rmeta)
+            } else if file.starts_with(&rlib_prefix) && file.ends_with(".rcheck") {
+                (&file[(rlib_prefix.len())..(file.len() - ".rcheck".len())], CrateFlavor::Rmeta)
             } else if file.starts_with(&dylib_prefix) && file.ends_with(&self.target.dll_suffix) {
                 (
                     &file[(dylib_prefix.len())..(file.len() - self.target.dll_suffix.len())],
@@ -681,7 +683,10 @@ impl<'a> CrateLocator<'a> {
                 }
             };
 
-            if file.starts_with("lib") && (file.ends_with(".rlib") || file.ends_with(".rmeta"))
+            if file.starts_with("lib")
+                && (file.ends_with(".rlib")
+                    || file.ends_with(".rmeta")
+                    || file.ends_with(".rcheck"))
                 || file.starts_with(&self.target.dll_prefix)
                     && file.ends_with(&self.target.dll_suffix)
             {
@@ -694,9 +699,12 @@ impl<'a> CrateLocator<'a> {
                 // rmetas as dylibs.
                 let loc_canon = loc.canonicalized().clone();
                 let loc = loc.original();
-                if loc.file_name().unwrap().to_str().unwrap().ends_with(".rlib") {
+                let loc_file_name = loc.file_name().unwrap().to_str().unwrap();
+                if loc_file_name.ends_with(".rlib") {
                     rlibs.insert(loc_canon, PathKind::ExternFlag);
-                } else if loc.file_name().unwrap().to_str().unwrap().ends_with(".rmeta") {
+                } else if loc_file_name.ends_with(".rmeta")
+                    || loc_file_name.ends_with(".rcheck")
+                {
                     rmetas.insert(loc_canon, PathKind::ExternFlag);
                 } else {
                     dylibs.insert(loc_canon, PathKind::ExternFlag);
