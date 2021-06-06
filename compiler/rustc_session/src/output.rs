@@ -163,9 +163,18 @@ pub fn filename_for_input(
             outputs.out_directory.join(&format!("{}{}{}", prefix, libname, suffix))
         }
         CrateType::Executable => {
-            let suffix = &sess.target.exe_suffix;
-            let out_filename = outputs.path(OutputType::Exe);
-            if suffix.is_empty() { out_filename } else { out_filename.with_extension(&suffix[1..]) }
+            if sess.opts.debugging_opts.no_link {
+                // If we're deferring linking, generate executable as an rlib
+                outputs.out_directory.join(&format!("{}.rlib", crate_name))
+            } else {
+                let suffix = &sess.target.exe_suffix;
+                let out_filename = outputs.path(OutputType::Exe);
+                if suffix.is_empty() {
+                    out_filename
+                } else {
+                    out_filename.with_extension(&suffix[1..])
+                }
+            }
         }
     }
 }

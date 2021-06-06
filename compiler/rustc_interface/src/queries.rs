@@ -15,8 +15,7 @@ use rustc_middle::arena::Arena;
 use rustc_middle::dep_graph::DepGraph;
 use rustc_middle::ty::{GlobalCtxt, ResolverOutputs, TyCtxt};
 use rustc_query_impl::Queries as TcxQueries;
-use rustc_serialize::json;
-use rustc_session::config::{self, OutputFilenames, OutputType};
+use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::{output::find_crate_name, Session};
 use rustc_span::symbol::sym;
 use std::any::Any;
@@ -398,18 +397,6 @@ impl Linker {
             .keys()
             .any(|&i| i == OutputType::Exe || i == OutputType::Metadata)
         {
-            return Ok(());
-        }
-
-        if sess.opts.debugging_opts.no_link {
-            // FIXME: use a binary format to encode the `.rlink` file
-            let rlink_data = json::encode(&codegen_results).map_err(|err| {
-                sess.fatal(&format!("failed to encode rlink: {}", err));
-            })?;
-            let rlink_file = self.prepare_outputs.with_extension(config::RLINK_EXT);
-            std::fs::write(&rlink_file, rlink_data).map_err(|err| {
-                sess.fatal(&format!("failed to write file {}: {}", rlink_file.display(), err));
-            })?;
             return Ok(());
         }
 

@@ -98,13 +98,25 @@ pub fn link_binary<'a, B: ArchiveBuilder<'a>>(
                     link_staticlib::<B>(sess, codegen_results, &out_filename, &path);
                 }
                 _ => {
-                    link_natively::<B>(
-                        sess,
-                        crate_type,
-                        &out_filename,
-                        codegen_results,
-                        path.as_ref(),
-                    );
+                    if crate_type == CrateType::Executable && sess.opts.debugging_opts.no_link {
+                        let _timer = sess.timer("exe_rlib");
+                        link_rlib::<B>(
+                            sess,
+                            codegen_results,
+                            RlibFlavor::Normal,
+                            &out_filename,
+                            &path,
+                        )
+                        .build();
+                    } else {
+                        link_natively::<B>(
+                            sess,
+                            crate_type,
+                            &out_filename,
+                            codegen_results,
+                            path.as_ref(),
+                        );
+                    }
                 }
             }
             if sess.opts.json_artifact_notifications {
