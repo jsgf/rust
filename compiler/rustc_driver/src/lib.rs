@@ -304,7 +304,7 @@ fn run_compiler(
                 compiler.input(),
             )
         })
-        .and_then(|| RustcDefaultCalls::try_process_rlink(sess, compiler));
+        .and_then(|| RustcDefaultCalls::try_process_link_only(sess, compiler));
 
         if should_stop == Compilation::Stop {
             return sess.compile_status();
@@ -596,7 +596,7 @@ fn show_content_with_pager(content: &str) {
 }
 
 impl RustcDefaultCalls {
-    pub fn try_process_rlink(sess: &Session, compiler: &interface::Compiler) -> Compilation {
+    pub fn try_process_link_only(sess: &Session, compiler: &interface::Compiler) -> Compilation {
         if sess.opts.debugging_opts.link_only {
             if let Input::File(file) = compiler.input() {
                 // FIXME: #![crate_type] and #![crate_name] support not implemented yet
@@ -612,7 +612,7 @@ impl RustcDefaultCalls {
                 let result = compiler.codegen_backend().link(&sess, codegen_results, &outputs);
                 abort_on_err(result, sess);
             } else {
-                sess.fatal("rlink must be a file")
+                sess.fatal("exec rlib must be a file")
             }
             Compilation::Stop
         } else {
