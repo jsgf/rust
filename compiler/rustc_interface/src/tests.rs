@@ -65,6 +65,7 @@ where
         location: ExternLocation::ExactPaths(locations),
         is_private_dep: false,
         add_prelude: true,
+        sysroot_dep: false,
     }
 }
 
