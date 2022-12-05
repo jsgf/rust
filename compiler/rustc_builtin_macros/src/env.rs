@@ -13,7 +13,11 @@ use thin_vec::thin_vec;
 use crate::errors;
 
 fn lookup_env<'cx>(cx: &'cx ExtCtxt<'_>, var: Symbol) -> Option<Symbol> {
-    cx.sess.opts.logical_env.get(var.as_str()).map(|val| Symbol::intern(val))
+    cx.sess
+        .opts
+        .logical_env
+        .get(var.as_str())
+        .and_then(|val| val.value().map(|v| Symbol::intern(&*v)))
 }
 
 pub fn expand_option_env<'cx>(

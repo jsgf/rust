@@ -427,7 +427,7 @@ impl server::Types for Rustc<'_, '_> {
 
 impl server::FreeFunctions for Rustc<'_, '_> {
     fn injected_env_var(&mut self, var: &str) -> Option<String> {
-        self.ecx.sess.opts.logical_env.get(var).cloned()
+        self.ecx.sess.opts.logical_env.get(var).and_then(|v| v.value()).map(|v| v.into_owned())
     }
 
     fn track_env_var(&mut self, var: &str, value: Option<&str>) {

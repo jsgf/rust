@@ -21,6 +21,7 @@ use rustc_target::abi::Align;
 use rustc_target::spec::LinkSelfContainedComponents;
 use rustc_target::spec::{PanicStrategy, RelocModel, SanitizerSet, SplitDebuginfo};
 use rustc_target::spec::{Target, TargetTriple, TargetWarnings, TARGETS};
+use std::borrow::Cow;
 use std::collections::btree_map::{
     Iter as BTreeMapIter, Keys as BTreeMapKeysIter, Values as BTreeMapValuesIter,
 };
@@ -1835,14 +1836,29 @@ pub fn rustc_optgroups() -> Vec<RustcOptGroup> {
         opt::multi(
             "",
             "env-pass",
-            "Set a variable in the logical environment from the process environment,
+            "Set a variable in the logical environment from the process environment, \
              even if it had previously been cleared or removed",
+            "VAR",
+        ),
+        opt::multi(
+            "",
+            "env-pass-path",
+            "Set a path variable in the logical environment from the process environment, \
+             even if it had previously been cleared or removed. The path is always treated \
+             as relative to rustc's current working directory.",
             "VAR",
         ),
         opt::multi(
             "",
             "env-set",
             "Add a new environment variable to the logical environment",
+            "VAR=VALUE",
+        ),
+        opt::multi(
+            "",
+            "env-set-path",
+            "Add a new path environment variable to the logical environment. \
+             The path is relative to rustc's current working directory.",
             "VAR=VALUE",
         ),
     ]);
@@ -2614,14 +2630,34 @@ fn parse_remap_path_prefix(
     mapping
 }
 
+#[derive(Clone, Debug, Hash)]
+pub enum EnvValue {
+    Literal(String),
+    Path(PathBuf),
+}
+
+impl EnvValue {
+    pub fn value<'a>(&'a self) -> Option<Cow<'a, String>> {
+        let ret = match self {
+            EnvValue::Literal(s) => Cow::Borrowed(s),
+            EnvValue::Path(path) => {
+                let cwd = std::env::current_dir().ok()?;
+                let path = cwd.join(path);
+                Cow::Owned(path.display().to_string())
+            }
+        };
+        Some(ret)
+    }
+}
+
 fn parse_logical_env(
     early_dcx: &mut EarlyDiagCtxt,
     matches: &getopts::Matches,
-) -> FxIndexMap<String, String> {
+) -> FxIndexMap<String, EnvValue> {
     // Initialize from process environment, ignoring anything that's not correct utf-8
     let mut logical_env: FxIndexMap<_, _> = std::env::vars_os()
         .filter_map(|(var, val)| match (var.into_string(), val.into_string()) {
-            (Ok(var), Ok(val)) => Some((var, val)),
+            (Ok(var), Ok(val)) => Some((var, EnvValue::Literal(val))),
             _ => None,
         })
         .collect();
@@ -2636,7 +2672,13 @@ fn parse_logical_env(
 
     for pass in matches.opt_strs("env-pass") {
         if let Ok(val) = std::env::var(&pass) {
-            logical_env.insert(pass, val);
+            logical_env.insert(pass, EnvValue::Literal(val));
+        }
+    }
+
+    for pass in matches.opt_strs("env-pass-path") {
+        if let Ok(val) = std::env::var(&pass) {
+            logical_env.insert(pass, EnvValue::Path(PathBuf::from(val)));
         }
     }
 
@@ -2651,7 +2693,21 @@ fn parse_logical_env(
             early_dcx.early_fatal("--env-set VAR must not be empty");
         }
 
-        logical_env.insert(var.to_string(), val.to_string());
+        logical_env.insert(var.to_string(), EnvValue::Literal(val.to_string()));
+    }
+
+    for insert in matches.opt_strs("env-set-path") {
+        let mut split = insert.splitn(2, '=');
+
+        let Some(var) = split.next() else { continue };
+        let Some(val) = split.next() else {
+            early_dcx.early_fatal("--env-set-path must contain `=` between VAR and VALUE");
+        };
+        if var.is_empty() {
+            early_dcx.early_fatal("--env-set-path VAR must not be empty");
+        }
+
+        logical_env.insert(var.to_string(), EnvValue::Path(PathBuf::from(val)));
     }
 
     logical_env
@@ -3249,11 +3305,11 @@ pub enum WasiExecModel {
 pub(crate) mod dep_tracking {
     use super::{
         BranchProtection, CFGuard, CFProtection, CrateType, DebugInfo, DebugInfoCompression,
-        ErrorOutputType, FunctionReturn, InliningThreshold, InstrumentCoverage, InstrumentXRay,
-        LinkerPluginLto, LocationDetail, LtoCli, NextSolverConfig, OomStrategy, OptLevel,
-        OutFileName, OutputType, OutputTypes, Polonius, RemapPathScopeComponents, ResolveDocLinks,
-        SourceFileHashAlgorithm, SplitDwarfKind, SwitchWithOptPath, SymbolManglingVersion,
-        TrimmedDefPaths, WasiExecModel,
+        EnvValue, ErrorOutputType, FunctionReturn, InliningThreshold, InstrumentCoverage,
+        InstrumentXRay, LinkerPluginLto, LocationDetail, LtoCli, NextSolverConfig, OomStrategy,
+        OptLevel, OutFileName, OutputType, OutputTypes, Polonius, RemapPathScopeComponents,
+        ResolveDocLinks, SourceFileHashAlgorithm, SplitDwarfKind, SwitchWithOptPath,
+        SymbolManglingVersion, TrimmedDefPaths, WasiExecModel,
     };
     use crate::lint;
     use crate::utils::NativeLib;
@@ -3360,6 +3416,7 @@ pub(crate) mod dep_tracking {
         Polonius,
         InliningThreshold,
         FunctionReturn,
+        EnvValue,
     );
 
     impl<T1, T2> DepTrackingHash for (T1, T2)
