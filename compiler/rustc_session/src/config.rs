@@ -1630,12 +1630,11 @@ impl RustcOptGroup {
     }
 }
 
-// The `opt` local module holds wrappers around the `getopts` API that
-// adds extra rustc-specific metadata to each option; such metadata
-// is exposed by . The public
-// functions below ending with `_u` are the functions that return
-// *unstable* options, i.e., options that are only enabled when the
-// user also passes the `-Z unstable-options` debugging flag.
+// The `opt` local module holds wrappers around the `getopts` API that adds
+// extra rustc-specific metadata to each option; such metadata is exposed by .
+// The public functions below *not* ending with `_s` are the functions that return
+// *unstable* options, i.e., options that are only enabled when the user also
+// passes the `-Z unstable-options` debugging flag.
 mod opt {
     // The `fn flag*` etc below are written so that we can use them
     // in the future; do not warn about them not being used right now.
@@ -1682,6 +1681,9 @@ mod opt {
     }
     pub fn multi(a: S, b: S, c: S, d: S) -> R {
         unstable(longer(a, b), move |opts| opts.optmulti(a, b, c, d))
+    }
+    pub fn flag(a: S, b: S, c: S) -> R {
+        unstable(longer(a, b), move |opts| opts.optflag(a, b, c))
     }
 }
 static EDITION_STRING: LazyLock<String> = LazyLock::new(|| {
@@ -1823,7 +1825,26 @@ pub fn rustc_optgroups() -> Vec<RustcOptGroup> {
             "Remap source names in all output (compiler messages and output files)",
             "FROM=TO",
         ),
-        opt::multi("", "env", "Inject an environment variable", "VAR=VALUE"),
+        opt::flag("", "env-clear", "Clear logical environment"),
+        opt::multi(
+            "",
+            "env-remove",
+            "Remove an environment variable from the logical environment",
+            "VAR",
+        ),
+        opt::multi(
+            "",
+            "env-pass",
+            "Set a variable in the logical environment from the process environment,
+             even if it had previously been cleared or removed",
+            "VAR",
+        ),
+        opt::multi(
+            "",
+            "env-set",
+            "Add a new environment variable to the logical environment",
+            "VAR=VALUE",
+        ),
     ]);
     opts
 }
@@ -2597,17 +2618,43 @@ fn parse_logical_env(
     early_dcx: &mut EarlyDiagCtxt,
     matches: &getopts::Matches,
 ) -> FxIndexMap<String, String> {
-    let mut vars = FxIndexMap::default();
+    // Initialize from process environment, ignoring anything that's not correct utf-8
+    let mut logical_env: FxIndexMap<_, _> = std::env::vars_os()
+        .filter_map(|(var, val)| match (var.into_string(), val.into_string()) {
+            (Ok(var), Ok(val)) => Some((var, val)),
+            _ => None,
+        })
+        .collect();
 
-    for arg in matches.opt_strs("env") {
-        if let Some((name, val)) = arg.split_once('=') {
-            vars.insert(name.to_string(), val.to_string());
-        } else {
-            early_dcx.early_fatal(format!("`--env`: specify value for variable `{arg}`"));
+    if matches.opt_present("env-clear") {
+        logical_env.clear();
+    }
+
+    for remove in matches.opt_strs("env-remove") {
+        logical_env.remove(&remove);
+    }
+
+    for pass in matches.opt_strs("env-pass") {
+        if let Ok(val) = std::env::var(&pass) {
+            logical_env.insert(pass, val);
         }
     }
 
-    vars
+    for insert in matches.opt_strs("env-set") {
+        let mut split = insert.splitn(2, '=');
+
+        let Some(var) = split.next() else { continue };
+        let Some(val) = split.next() else {
+            early_dcx.early_fatal("--env-set must contain `=` between VAR and VALUE");
+        };
+        if var.is_empty() {
+            early_dcx.early_fatal("--env-set VAR must not be empty");
+        }
+
+        logical_env.insert(var.to_string(), val.to_string());
+    }
+
+    logical_env
 }
 
 // JUSTIFICATION: before wrapper fn is available

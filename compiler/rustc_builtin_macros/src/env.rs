@@ -8,19 +8,12 @@ use rustc_ast::{self as ast, AstDeref, GenericArg};
 use rustc_expand::base::{self, *};
 use rustc_span::symbol::{kw, sym, Ident, Symbol};
 use rustc_span::Span;
-use std::env;
 use thin_vec::thin_vec;
 
 use crate::errors;
 
 fn lookup_env<'cx>(cx: &'cx ExtCtxt<'_>, var: Symbol) -> Option<Symbol> {
-    let var = var.as_str();
-    if let Some(value) = cx.sess.opts.logical_env.get(var) {
-        return Some(Symbol::intern(value));
-    }
-    // If the environment variable was not defined with the `--env` option, we try to retrieve it
-    // from rustc's environment.
-    env::var(var).ok().as_deref().map(Symbol::intern)
+    cx.sess.opts.logical_env.get(var.as_str()).map(|val| Symbol::intern(val))
 }
 
 pub fn expand_option_env<'cx>(
