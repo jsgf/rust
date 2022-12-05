@@ -1,0 +1,10 @@
+error: environment variable `PATH` not defined
+  --> $DIR/extenv-not-defined-clear.rs:3:5
+   |
+LL |     env!("PATH");
+   |     ^^^^^^^^^^^^
+   |
+   = note: this error originates in the macro `env` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: aborting due to previous error
+
