@@ -2682,30 +2682,31 @@ fn parse_logical_env(
         }
     }
 
-    for insert in matches.opt_strs("env-set") {
-        let mut split = insert.splitn(2, '=');
-
-        let Some(var) = split.next() else { continue };
+    fn extract_env<'a>(
+        early_dcx: &mut EarlyDiagCtxt,
+        arg: &'a str,
+        opt: &str,
+    ) -> Option<(&'a str, &'a str)> {
+        let mut split = arg.splitn(2, '=');
+        let Some(var) = split.next() else { return None };
         let Some(val) = split.next() else {
-            early_dcx.early_fatal("--env-set must contain `=` between VAR and VALUE");
+            early_dcx.early_fatal(format!("--{opt} must contain `=` between VAR and VALUE"));
         };
         if var.is_empty() {
-            early_dcx.early_fatal("--env-set VAR must not be empty");
+            early_dcx.early_fatal(format!("--{opt} VAR must not be empty"));
         }
+
+        Some((var, val))
+    }
+
+    for arg in matches.opt_strs("env-set") {
+        let Some((var, val)) = extract_env(early_dcx, &arg, "env-set") else { continue };
 
         logical_env.insert(var.to_string(), EnvValue::Literal(val.to_string()));
     }
 
-    for insert in matches.opt_strs("env-set-path") {
-        let mut split = insert.splitn(2, '=');
-
-        let Some(var) = split.next() else { continue };
-        let Some(val) = split.next() else {
-            early_dcx.early_fatal("--env-set-path must contain `=` between VAR and VALUE");
-        };
-        if var.is_empty() {
-            early_dcx.early_fatal("--env-set-path VAR must not be empty");
-        }
+    for arg in matches.opt_strs("env-set-path") {
+        let Some((var, val)) = extract_env(early_dcx, &arg, "env-set-path") else { continue };
 
         logical_env.insert(var.to_string(), EnvValue::Path(PathBuf::from(val)));
     }
