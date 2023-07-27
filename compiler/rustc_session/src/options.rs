@@ -152,7 +152,7 @@ top_level_options!(
         target_triple: TargetTriple [TRACKED],
 
         /// Effective logical environment used by `env!`/`option_env!` macros
-        logical_env: FxIndexMap<String, EnvValue> [TRACKED],
+        logical_env: FxIndexMap<String, EnvValue> [UNTRACKED],
 
         test: bool [TRACKED],
         error_format: ErrorOutputType [UNTRACKED],
