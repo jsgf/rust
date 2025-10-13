@@ -303,6 +303,8 @@ pub mod prelude;
 pub mod hint;
 pub mod intrinsics;
 pub mod mem;
+#[unstable(feature = "profiling_marker_api", issue = "none")]
+pub mod profiling;
 pub mod ptr;
 #[unstable(feature = "ub_checks", issue = "none")]
 pub mod ub_checks;
