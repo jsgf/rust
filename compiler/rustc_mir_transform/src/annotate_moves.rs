@@ -13,7 +13,7 @@ use rustc_index::IndexVec;
 use rustc_middle::mir::*;
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt, TypingEnv};
 use rustc_session::config::DebugInfo;
-use rustc_span::sym;
+use rustc_span::Symbol;
 
 /// Default minimum size in bytes for move/copy operations to be annotated. Set to 64+1 bytes
 /// (typical cache line size) to focus on potentially expensive operations.
@@ -168,10 +168,18 @@ impl<'tcx> crate::MirPass<'tcx> for AnnotateMoves {
 
 impl AnnotateMoves {
     pub(crate) fn new<'tcx>(tcx: TyCtxt<'tcx>) -> Self {
-        let compiler_copy = tcx.get_diagnostic_item(sym::compiler_copy);
-        let compiler_move = tcx.get_diagnostic_item(sym::compiler_move);
+        // We need to look up the diagnostic items at runtime
+        // to maintain hash compatibility with unmodified rustc
+        // builds.
+        #[allow(rustc::symbol_intern_string_literal)]
+        let compiler_copy = tcx.get_diagnostic_item(Symbol::intern("compiler_copy"));
+        #[allow(rustc::symbol_intern_string_literal)]
+        let compiler_move = tcx.get_diagnostic_item(Symbol::intern("compiler_move"));
 
-        Self { compiler_copy, compiler_move }
+        Self {
+            compiler_copy,
+            compiler_move,
+        }
     }
 
     /// Returns annotated SourceInfo for a move/copy operation without modifying anything.
