@@ -801,10 +801,7 @@ impl<'a, 'tcx> ResultsVisitor<'tcx, Borrowck<'a, 'tcx>> for MirBorrowckCtxt<'a, 
                 func,
                 args,
                 destination,
-                target: _,
-                unwind: _,
-                call_source: _,
-                fn_span: _,
+                ..
             } => {
                 self.consume_operand(loc, (func, span), state);
                 for arg in args {
@@ -812,7 +809,7 @@ impl<'a, 'tcx> ResultsVisitor<'tcx, Borrowck<'a, 'tcx>> for MirBorrowckCtxt<'a, 
                 }
                 self.mutate_place(loc, (*destination, span), Deep, state);
             }
-            TerminatorKind::TailCall { func, args, fn_span: _ } => {
+            TerminatorKind::TailCall { func, args, .. } => {
                 self.consume_operand(loc, (func, span), state);
                 for arg in args {
                     self.consume_operand(loc, (&arg.node, arg.span), state);

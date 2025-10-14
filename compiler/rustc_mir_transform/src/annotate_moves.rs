@@ -65,11 +65,9 @@ impl<'tcx> crate::MirPass<'tcx> for AnnotateMoves {
             size_limit,
         };
 
-        // Storage for Call terminator argument SourceInfo
-        let mut call_arg_source_info = Vec::new();
 
         // Process each basic block
-        for (block, block_data) in body.basic_blocks.as_mut().iter_enumerated_mut() {
+        for block_data in body.basic_blocks.as_mut().iter_mut() {
             for stmt in &mut block_data.statements {
                 let source_info = &mut stmt.source_info;
 
@@ -113,21 +111,36 @@ impl<'tcx> crate::MirPass<'tcx> for AnnotateMoves {
                 // Save the original scope before processing any operands
                 let original_scope = source_info.scope;
 
-                match &terminator.kind {
-                    TerminatorKind::Call { func, args, .. }
-                    | TerminatorKind::TailCall { func, args, .. } => {
+                match &mut terminator.kind {
+                    TerminatorKind::Call { func, args, arg_move_source_info, .. }
+                    | TerminatorKind::TailCall { func, args, arg_move_source_info, .. } => {
                         self.annotate_move(&mut params, source_info, original_scope, func);
 
-                        // For Call arguments, store SourceInfo separately instead of modifying
-                        // the terminator's SourceInfo (which would affect the entire Call)
-                        for (index, arg) in args.iter().enumerate() {
-                            if let Some(arg_source_info) = self.get_annotated_source_info(
+                        // For Call arguments, collect SourceInfo for the arguments
+                        let mut arg_move_infos = Vec::with_capacity(args.len());
+                        let mut has_source_info = false;
+
+                        // First collect the source info for each argument
+                        for arg in args.iter() {
+                            let arg_source_info = self.get_annotated_source_info(
                                 &mut params,
                                 original_scope,
                                 &arg.node,
-                            ) {
-                                call_arg_source_info.push(((block, index), arg_source_info));
+                            );
+
+                            if arg_source_info.is_some() {
+                                has_source_info = true;
                             }
+
+                            arg_move_infos.push(arg_source_info);
+                        }
+
+                        // If we have any source info, update the terminator
+                        if has_source_info {
+                            // This pass is the only one that populates arg_move_source_info,
+                            // so it should always be None when we get here
+                            assert!(arg_move_source_info.is_none());
+                            *arg_move_source_info = Some(arg_move_infos.into_boxed_slice());
                         }
                     }
                     TerminatorKind::SwitchInt { discr: op, .. }
@@ -156,9 +169,6 @@ impl<'tcx> crate::MirPass<'tcx> for AnnotateMoves {
                 }
             }
         }
-
-        // Store the Call argument SourceInfo in the body (only if we have any)
-        body.call_arg_move_source_info = call_arg_source_info;
     }
 
     fn is_required(&self) -> bool {

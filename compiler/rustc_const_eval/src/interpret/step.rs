@@ -512,8 +512,7 @@ impl<'tcx, M: Machine<'tcx>> InterpCx<'tcx, M> {
                 destination,
                 target,
                 unwind,
-                call_source: _,
-                fn_span: _,
+                ..
             } => {
                 let old_stack = self.frame_idx();
                 let old_loc = self.frame().loc;
@@ -538,7 +537,7 @@ impl<'tcx, M: Machine<'tcx>> InterpCx<'tcx, M> {
                 }
             }
 
-            TailCall { ref func, ref args, fn_span: _ } => {
+            TailCall { ref func, ref args, .. } => {
                 let old_frame_idx = self.frame_idx();
 
                 let EvaluatedCalleeAndArgs { callee, args, fn_sig, fn_abi, with_caller_location } =
