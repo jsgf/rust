@@ -101,7 +101,8 @@ impl<'tcx> crate::MirPass<'tcx> for AnnotateMoves {
                         | Rvalue::Discriminant(..)
                         | Rvalue::CopyForDeref(..)
                         | Rvalue::ShallowInitBox(..)
-                        | Rvalue::WrapUnsafeBinder(..) => {} // No operands to instrument
+                        | Rvalue::WrapUnsafeBinder(..)
+                        | Rvalue::Len(..) => {} // No operands to instrument
                     }
                 }
             }
